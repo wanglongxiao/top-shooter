@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "defaultActionId": "web",
+  "actions": [
+    {
+      "id": "web",
+      "name": "Top Shooter 游戏",
+      "command": "npm run dev",
+      "cwd": ".",
+      "background": true,
+      "source": "agent",
+      "readiness": {
+        "outputPatterns": ["ready in"],
+        "timeoutMs": 60000
+      },
+      "open": {
+        "type": "preview",
+        "url": "http://localhost:5173/",
+        "urlFromOutput": true
+      }
+    }
+  ]
+}

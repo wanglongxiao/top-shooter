@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,">
+  <style>
+    html,body { margin:0;height:100%;background:#081b2d;color:white;font-family:Arial,sans-serif }
+    #frame { height:100dvh;width:min(100%,480px);margin:auto;position:relative }
+    #canvas { position:absolute;inset:0 } canvas { display:block }
+    #label { position:absolute;top:24px;left:16px;right:16px;background:#081b2ddd;padding:14px;border-radius:12px }
+    h1 { margin:0 0 5px;font-size:20px } p { margin:0;font-size:12px }
+    #controls { position:absolute;bottom:24px;left:16px;right:16px;display:flex;gap:8px;justify-content:center }
+    button { border:0;background:#234761;color:white;padding:10px;border-radius:8px }
+  </style>
+</head>
+<body>
+  <div id="frame"><div id="canvas"></div><div id="label"><h1></h1><p></p></div>
+    <div id="controls"><button id="shot">开火</button><button id="hit">命中</button><button id="ultimate">大招</button><button id="audio">音效压力</button></div>
+  </div>
+  <script type="module">
+    import { Engine, WEAPONS } from '../src/engine.ts';
+    import { GameScene } from '../src/scene.ts';
+    import { BattleAudio } from '../src/audio.ts';
+    const tier = Math.max(0, Math.min(19, Number(new URL(location.href).searchParams.get('weapon') || 0)));
+    const weapon = WEAPONS[tier], engine = new Engine(), audio = new BattleAudio();
+    engine.entities = []; engine.troops = 120; engine.weapon = tier; engine.weaponXP = weapon.unlock; engine.start();
+    const scene = new GameScene(document.querySelector('#canvas'));
+    engine.bullets = Array.from({length:18}, (_,i) => ({id:i+1000,x:(i%3-1)*.75,z:-3-Math.floor(i/3)*3.1,target:0,damage:weapon.damage,weapon:tier}));
+    document.querySelector('h1').textContent = `Lv.${tier+1} ${weapon.name}`;
+    document.querySelector('p').textContent = `${weapon.description} · ${weapon.damage} 攻击力`;
+    scene.render(engine,.016);
+    // Freeze game time so effects and geometry are comparable between tiers.
+    function render() { scene.render(engine,0); requestAnimationFrame(render); }
+    requestAnimationFrame(render);
+    const emit = type => {
+      scene.emit({type,weapon:tier,x:0,z:type==='hit'?-12:0});
+      scene.render(engine,.035);
+    };
+    document.querySelector('#shot').onclick = () => emit('shot');
+    document.querySelector('#hit').onclick = () => emit('hit');
+    document.querySelector('#ultimate').onclick = () => { engine.fever=6; emit('fever'); };
+    let audioResult = null, audioRunning = false;
+    document.querySelector('#audio').onclick = () => {
+      if (audioRunning) return;
+      audioRunning = true; audio.init(); audio.setState(true,true);
+      const analyser = audio.context.createAnalyser(); analyser.fftSize = 2048; audio.master.connect(analyser);
+      const samples = new Float32Array(analyser.fftSize);
+      let ticks=0, peak=0, sum=0, count=0;
+      const timer = setInterval(() => {
+        for(let i=0;i<30;i++) audio.effect({type:'shot',weapon:ticks%20});
+        if(ticks%8===0) for(let i=0;i<40;i++) {
+          audio.effect({type:'bossAttack',style:'lightning',effectId:'lightning_9'});
+          audio.effect({type:'bossImpact',style:'lightning',effectId:'lightning_9'});
+          audio.effect({type:'kill',weapon:tier});
+        }
+        if(ticks%30===15) audio.effect({type:'fever',weapon:tier});
+        analyser.getFloatTimeDomainData(samples);
+        for(const value of samples) { peak=Math.max(peak,Math.abs(value));sum+=value*value;count++; }
+        if(++ticks>=150) {
+          clearInterval(timer);audio.setState(false,false);
+          setTimeout(() => {
+            audioResult={peak,rms:Math.sqrt(sum/count),...audio.state};analyser.disconnect();
+            document.querySelector('#audio').textContent='音效完成';
+          },800);
+        }
+      },20);
+    };
+    window.__weaponPreview = {
+      get snapshot() {
+        const geometry=scene.shots[tier].geometry;
+        return { tier, id:weapon.id, vertices:geometry.attributes.position.count,
+          geometry:Array.from(geometry.attributes.position.array), colors:Array.from(geometry.attributes.color.array),
+          shots:scene.shots[tier].count, calls:scene.renderer.info.render.calls,
+          beams:scene.beams.count,sigils:scene.sigils.count,columns:scene.columns.count,slashes:scene.slashes.count,
+          performance:scene.performanceState,audioResult };
+      }
+    };
+  </script>
+</body>
+</html>

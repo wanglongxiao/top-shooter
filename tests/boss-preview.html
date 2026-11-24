@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <style>
+    html,body { margin:0; height:100%; background:#081b2d; font-family:Arial,sans-serif; color:white }
+    #preview { height:100dvh; width:min(100%,480px); margin:auto; position:relative }
+    #canvas { position:absolute; inset:0 } canvas { display:block }
+    #title { position:absolute; top:36px; left:24px; right:24px; border:1px solid #ffffff44; background:#081b2dda; border-radius:16px; padding:18px }
+    h1 { margin:0 0 8px; font-size:24px } p { margin:0; font-size:13px; color:#c5dbeb }
+    #army { position:absolute; bottom:30px; width:100%; text-align:center; font-weight:bold; color:#7adfff }
+    #controls { position:absolute; bottom:70px; right:10px; display:flex; gap:6px } button { padding:8px; border:0; border-radius:5px }
+  </style>
+</head>
+<body>
+  <div id="preview"><div id="canvas"></div><div id="title"><h1></h1><p></p></div><div id="army">Top Shooter · 120 射手</div><div id="controls"><button id="cast">预警</button><button id="impact">攻击</button><button id="ultimate">爆发</button></div></div>
+  <script type="module">
+    import { Engine, bossInfo } from '../src/engine.ts';
+    import { GameScene } from '../src/scene.ts';
+    const engine = new Engine();
+    const boss = engine.entities.find(e => e.kind === 'enemy');
+    boss.kind = 'boss'; boss.archetype = new URL(location.href).searchParams.get('boss') || 'brute';
+    boss.x = 0; boss.z = -14; boss.hp = boss.maxHp = 18000; boss.bossTime = 5; boss.attackTimer = .3;
+    const gate = engine.entities.find(e => e.kind === 'gate');
+    gate.value = -50; gate.operation = 'add'; gate.x = 2.15; gate.z = -27;
+    engine.entities = [boss, gate]; engine.troops = 120; engine.weapon = 4; engine.weaponXP = 30; engine.start();
+    const scene = new GameScene(document.querySelector('#canvas'));
+    engine.onEvent = event => scene.emit(event);
+    document.querySelector('h1').textContent = bossInfo(boss.archetype).name;
+    document.querySelector('p').textContent = bossInfo(boss.archetype).tactic;
+    let last = performance.now(), frozen = false;
+    function render(now) { scene.render(engine, frozen ? 0 : Math.min(.05,(now-last)/1000)); last=now; requestAnimationFrame(render); }
+    requestAnimationFrame(render);
+    document.querySelector('#cast').onclick = () => {
+      frozen = true; engine.strikes = []; engine.threats = []; engine.bullets = [];
+      scene.battleEffects.length = 0; boss.x = 0; boss.z = -14; boss.bossTime = 7; boss.attackTimer = 0;
+      engine.update(.02); boss.attackTimer = 99;
+      document.querySelector('p').textContent = bossInfo(boss.archetype).skills[(boss.attackPhase-1)%2].name;
+      scene.render(engine,.18);
+    };
+    document.querySelector('#impact').onclick = () => {
+      const seconds = Math.max(...engine.strikes.map(s=>s.timer),0)+.01;
+      for(let i=0;i<Math.ceil(seconds/.05);i++) engine.update(.05);
+      scene.render(engine,.18);
+    };
+    document.querySelector('#ultimate').onclick = () => {
+      frozen = true; engine.fever = 6;
+      scene.emit({type:'fever',x:engine.x,z:0,weapon:engine.weapon});
+      scene.render(engine,.2);
+    };
+    window.__bossPreview = {
+      setGate: value => { gate.value = value; },
+      clear: () => { engine.entities = []; },
+      get snapshot() {
+        const visual = scene.visuals.get(boss.id);
+        const gateVisual = scene.visuals.get(gate.id);
+        return { geometries: scene.renderer.info.memory.geometries, textures: scene.renderer.info.memory.textures,
+          textureId: gateVisual?.banner.material.map.uuid, label: gateVisual?.hp, performance: scene.performanceState,
+          joints: visual?.joints.length, calls: scene.renderer.info.render.calls, threats: engine.threats.length,
+          beams: scene.beams.count, columns: scene.columns.count, sigils: scene.sigils.count, slashes: scene.slashes.count,
+          effectIds: [...new Set(scene.battleEffects.filter(e=>!e.cast).map(e=>e.recipe.id))],
+          castIds: [...new Set(scene.battleEffects.filter(e=>e.cast).map(e=>e.recipe.id))],
+          signature: visual ? (() => { let vertices=0, meshes=0; visual.group.traverse(o=>{ if(o.geometry){vertices+=o.geometry.attributes.position.count;meshes++;} }); return {vertices,meshes}; })() : null };
+      },
+    };
+  </script>
+</body>
+</html>

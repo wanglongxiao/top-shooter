@@ -1,0 +1,24 @@
+{
+  "name": "top-shooter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build && node scripts/pack.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test:browser": "playwright test --workers=1",
+    "test:offline": "npm run build && playwright test --config=playwright.offline.config.ts",
+    "benchmark": "node scripts/benchmark.mjs",
+    "test": "node --experimental-strip-types --test tests/engine.test.ts"
+  },
+  "dependencies": {
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/three": "^0.182.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  }
+}
